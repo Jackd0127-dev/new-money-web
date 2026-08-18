@@ -1,0 +1,12 @@
+export type ViewKey =
+  | 'dashboard'
+  | 'aiPlan'
+  | 'payday'
+  | 'pots'
+  | 'spending'
+  | 'allocatingPayments'
+  | 'debts'
+  | 'recurring'
+  | 'calendar'
+  | 'history'
+  | 'settings'

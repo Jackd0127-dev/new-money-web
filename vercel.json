@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/daily-brief.ts": {
+      "includeFiles": "api/daily-brief-instructions.md"
+    },
+    "api/ai-planner.ts": {
+      "includeFiles": "api/daily-brief-instructions.md"
+    }
+  }
+}
