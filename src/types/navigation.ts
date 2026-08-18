@@ -3,6 +3,7 @@ export type ViewKey =
   | 'aiPlan'
   | 'payday'
   | 'pots'
+  | 'savingsInvestments'
   | 'spending'
   | 'allocatingPayments'
   | 'debts'

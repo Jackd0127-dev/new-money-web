@@ -1,22 +1,15 @@
 import { GoogleGenAI, Type } from '@google/genai'
-import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 
 import { defaultSettings } from '../src/data/defaults.js'
 import { getDebtReservePlans, type DebtReservePlan } from '../src/domain/debtPlanner.js'
 import { findPayPeriodForDate, formatPence, toIsoDate } from '../src/domain/money.js'
 import type { PlannerSnapshot } from '../src/storage/repository.js'
+import { getBearerToken, getSafeErrorName, initializeFirebaseAdmin } from '../server/firebaseAdmin.js'
+import { isRequestBodyTooLarge, setSecureApiHeaders } from '../server/apiSecurity.js'
+import { readAiInstruction } from '../server/aiInstructions.js'
 
-const systemInstruction = `
-You are a deterministic debt planner inside a private UK paycheck-planner app.
-The app has already calculated every debt reserve amount. You must explain the calculated facts, not recalculate them.
-Use only the provided calculated debt plan facts.
-Never invent balances, dates, income, debts, payments, pots, credit cards, or reserves.
-Never provide tax, legal, regulated investment, credit product, debt restructuring, or lending advice.
-Never suggest borrowing money, taking new credit, investing, or changing legal/tax arrangements.
-If the user asks to skip a paycheck, explain the calculated consequence and any shortfall.
-Write in UK English, format money as GBP, and keep answers practical.
-`.trim()
+const systemInstruction = readAiInstruction('ai-planner-system.md')
 
 const aiPlannerResponseSchema = {
   type: Type.OBJECT,
@@ -73,9 +66,15 @@ interface AiPlannerResponse {
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
+  setSecureApiHeaders(res)
+
   if (req.method !== 'POST') {
     res.setHeader?.('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (isRequestBodyTooLarge(req.body)) {
+    return res.status(413).json({ error: 'Request body is too large.' })
   }
 
   const idToken = getBearerToken(req.headers.authorization)
@@ -89,11 +88,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   try {
     initializeFirebaseAdmin()
-    await getAuth().verifyIdToken(idToken)
+    await getAuth().verifyIdToken(idToken, true)
   } catch (error) {
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Unable to verify planner access',
-    })
+    console.error('AI planner access verification failed', { reason: getSafeErrorName(error) })
+    return res.status(401).json({ error: 'Unable to verify planner access.' })
   }
 
   const snapshot = normalizePlannerSnapshot(body.snapshot)
@@ -108,8 +106,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     recurringPayments: snapshot.recurringPayments,
     customPayments: snapshot.customPayments,
     transactions: snapshot.transactions,
+    creditCardPots: snapshot.creditCardPots,
     creditCardRepayments: snapshot.creditCardRepayments,
     debtReserves: snapshot.debtReserves,
+    pots: snapshot.pots,
+    potAllocations: snapshot.potAllocations,
   })
   const fallback = createFallbackResponse(plans)
   const provider = snapshot.settings.aiProvider
@@ -192,7 +193,6 @@ async function generateOpenRouterJson({
         { role: 'system', content: systemInstruction },
         { role: 'user', content: prompt },
       ],
-      response_format: { type: 'json_object' },
     }),
   })
 
@@ -210,38 +210,6 @@ async function generateOpenRouterJson({
   }
 
   return content.trim()
-}
-
-function initializeFirebaseAdmin() {
-  if (getApps().length > 0) {
-    return
-  }
-
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-
-  if (!serviceAccountJson) {
-    throw new Error('Firebase service account is not configured')
-  }
-
-  const serviceAccount = JSON.parse(serviceAccountJson) as Record<string, unknown>
-
-  if (typeof serviceAccount.private_key === 'string') {
-    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n')
-  }
-
-  initializeApp({
-    credential: cert(serviceAccount),
-  })
-}
-
-function getBearerToken(value: string | string[] | undefined): string | null {
-  const header = Array.isArray(value) ? value[0] : value
-
-  if (!header?.startsWith('Bearer ')) {
-    return null
-  }
-
-  return header.slice('Bearer '.length).trim() || null
 }
 
 function parseBody(body: unknown): AiPlannerRequestBody {
@@ -327,12 +295,13 @@ function parseAiPlannerResponse(value: string): AiPlannerResponse {
   }
 
   const response = parsed as Partial<AiPlannerResponse>
+  const confidence = response.confidence
 
   if (
     typeof response.answer !== 'string' ||
     !isStringArray(response.risks) ||
     !isStringArray(response.actions) ||
-    !['high', 'medium', 'low'].includes(String(response.confidence))
+    !isAiPlannerConfidence(confidence)
   ) {
     throw new Error('Gemini returned an invalid AI planner response shape.')
   }
@@ -341,7 +310,7 @@ function parseAiPlannerResponse(value: string): AiPlannerResponse {
     answer: response.answer.trim(),
     risks: cleanList(response.risks),
     actions: cleanList(response.actions),
-    confidence: response.confidence,
+    confidence,
   }
 }
 
@@ -387,6 +356,7 @@ function normalizePlannerSnapshot(snapshot: unknown): PlannerSnapshot {
     debtPayments: input.debtPayments ?? [],
     debtReserves: input.debtReserves ?? [],
     creditCards: input.creditCards ?? [],
+    creditCardPots: input.creditCardPots ?? [],
     customPayments: input.customPayments ?? [],
     creditCardRepayments: input.creditCardRepayments ?? [],
     dailyBriefs: [],
@@ -399,4 +369,8 @@ function cleanList(items: string[]): string[] {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isAiPlannerConfidence(value: unknown): value is AiPlannerResponse['confidence'] {
+  return value === 'high' || value === 'medium' || value === 'low'
 }

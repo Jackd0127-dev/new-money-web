@@ -1,0 +1,7 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 58 44.4038" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Chip" opacity="0.7">
+<rect id="Body" x="0.7" y="0.7" width="56.6" height="43.0038" rx="6.55" fill="var(--fill-0, white)" fill-opacity="0.26" stroke="var(--stroke-0, white)" stroke-width="1.4"/>
+<path id="Vector 2" d="M0.90625 13.6594H16.3125C18.3145 13.6594 19.9375 15.2823 19.9375 17.2844V24.3592M19.9375 43.5278V35.059M19.9375 35.059V24.3592M19.9375 35.059H0.90625M19.9375 24.3592H0.90625" stroke="var(--stroke-0, white)" stroke-width="1.4"/>
+<path id="Vector 1" d="M57.0938 13.6594H38.9688M38.9688 13.6594V24.3592M38.9688 13.6594V0.910624M38.9688 43.5278V35.059M38.9688 35.059V24.3592M38.9688 35.059H57.0938M38.9688 24.3592H57.0938" stroke="var(--stroke-0, white)" stroke-width="1.4"/>
+</g>
+</svg>

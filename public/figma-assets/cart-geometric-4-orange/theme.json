@@ -1,0 +1,10 @@
+{
+  "id": "cart-geometric-4-orange",
+  "label": "Geometric 4 Orange",
+  "sourceDesignId": "cart-geometric-4",
+  "sourceNodeId": "1730:4631",
+  "bodyColor": "#f97316",
+  "topTextColor": "#1f2937",
+  "topMutedColor": "rgba(31, 41, 55, 0.7)",
+  "bottomTextColor": "#ffffff"
+}

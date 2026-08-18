@@ -28,6 +28,7 @@ export interface CloudSyncController {
   message: string
   cloudUpdatedAtIso: string | null
   isBusy: boolean
+  saveNow: () => Promise<boolean>
   retryCloudCheck: () => Promise<void>
 }
 
@@ -52,6 +53,7 @@ export function useCloudSync({
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false)
   const lastUploadedSignatureRef = useRef<string | null>(null)
   const checkedUserRef = useRef<string | null>(null)
+  const syncGenerationRef = useRef(0)
 
   const checkCloud = useCallback(async () => {
     if (!isFirebaseConfigured) {
@@ -74,6 +76,9 @@ export function useCloudSync({
       return
     }
 
+    const syncGeneration = syncGenerationRef.current
+    const isCurrentSync = () => syncGenerationRef.current === syncGeneration
+
     setStatus('checking')
     setMessage('Checking for cloud data.')
     setAutoSyncEnabled(false)
@@ -81,8 +86,17 @@ export function useCloudSync({
     try {
       const cloudRecord = await getCloudPlannerSnapshot(user.uid)
 
+      if (!isCurrentSync()) {
+        return
+      }
+
       if (!cloudRecord) {
         const updatedAtIso = await saveCloudPlannerSnapshot(user.uid, snapshot)
+
+        if (!isCurrentSync()) {
+          return
+        }
+
         lastUploadedSignatureRef.current = getSnapshotSignature(snapshot)
         setCloudUpdatedAtIso(updatedAtIso)
         setStatus('synced')
@@ -98,13 +112,22 @@ export function useCloudSync({
       if (localSignature === cloudSignature) {
         lastUploadedSignatureRef.current = localSignature
         setStatus('synced')
-        setMessage('Cloud sync is up to date.')
+        setMessage('Account data is up to date.')
         setAutoSyncEnabled(true)
         return
       }
 
       if (!hasMeaningfulPlannerData(snapshot)) {
+        if (!isCurrentSync()) {
+          return
+        }
+
         await replacePlannerSnapshot(cloudRecord.snapshot)
+
+        if (!isCurrentSync()) {
+          return
+        }
+
         await refresh()
         lastUploadedSignatureRef.current = cloudSignature
         setStatus('synced')
@@ -116,7 +139,16 @@ export function useCloudSync({
       const localUpdatedAtIso = getPlannerSnapshotUpdatedAtIso(snapshot)
 
       if (cloudRecord.updatedAtIso && cloudRecord.updatedAtIso > localUpdatedAtIso) {
+        if (!isCurrentSync()) {
+          return
+        }
+
         await replacePlannerSnapshot(cloudRecord.snapshot)
+
+        if (!isCurrentSync()) {
+          return
+        }
+
         await refresh()
         lastUploadedSignatureRef.current = cloudSignature
         setStatus('synced')
@@ -126,6 +158,11 @@ export function useCloudSync({
       }
 
       const updatedAtIso = await saveCloudPlannerSnapshot(user.uid, snapshot)
+
+      if (!isCurrentSync()) {
+        return
+      }
+
       lastUploadedSignatureRef.current = localSignature
       setCloudUpdatedAtIso(updatedAtIso)
       setStatus('synced')
@@ -136,6 +173,10 @@ export function useCloudSync({
       setMessage(toSyncMessage(caughtError))
     }
   }, [refresh, snapshot, user])
+
+  useEffect(() => {
+    syncGenerationRef.current += 1
+  }, [snapshot, user])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -184,18 +225,29 @@ export function useCloudSync({
       return undefined
     }
 
+    const syncGeneration = syncGenerationRef.current
+    const isCurrentSync = () => syncGenerationRef.current === syncGeneration
+
     const timeout = window.setTimeout(() => {
       setStatus('syncing')
       setMessage('Uploading the latest local changes.')
 
       saveCloudPlannerSnapshot(user.uid, snapshot)
         .then((updatedAtIso) => {
+          if (!isCurrentSync()) {
+            return
+          }
+
           lastUploadedSignatureRef.current = signature
           setCloudUpdatedAtIso(updatedAtIso)
           setStatus('synced')
-          setMessage('Cloud sync is up to date.')
+          setMessage('Account data is up to date.')
         })
         .catch((caughtError) => {
+          if (!isCurrentSync()) {
+            return
+          }
+
           setStatus('error')
           setMessage(toSyncMessage(caughtError))
         })
@@ -204,19 +256,56 @@ export function useCloudSync({
     return () => window.clearTimeout(timeout)
   }, [autoSyncEnabled, snapshot, user])
 
+  const saveNow = useCallback(async () => {
+    if (!isFirebaseConfigured || !user || !snapshot) {
+      return false
+    }
+
+    const signature = getSnapshotSignature(snapshot)
+
+    syncGenerationRef.current += 1
+    checkedUserRef.current = user.uid
+    setStatus('syncing')
+    setMessage('Saving account data before logout.')
+
+    try {
+      const updatedAtIso = await saveCloudPlannerSnapshot(user.uid, snapshot)
+
+      lastUploadedSignatureRef.current = signature
+      setCloudUpdatedAtIso(updatedAtIso)
+      setStatus('synced')
+      setMessage('Account data is up to date.')
+      setAutoSyncEnabled(true)
+      return true
+    } catch (caughtError) {
+      setStatus('error')
+      setMessage(toSyncMessage(caughtError))
+      return false
+    }
+  }, [snapshot, user])
+
   return {
     status,
     message,
     cloudUpdatedAtIso,
     isBusy: status === 'checking' || status === 'syncing',
+    saveNow,
     retryCloudCheck: checkCloud,
   }
 }
 
 function toSyncMessage(error: unknown): string {
   if (error instanceof Error) {
-    return error.message
+    const message = error.message.toLowerCase()
+
+    if (message.includes('permission') || message.includes('auth')) {
+      return 'Account data sync failed. Check your sign-in and account permissions.'
+    }
+
+    if (message.includes('network') || message.includes('offline')) {
+      return 'Account data sync failed. Check your connection and try again.'
+    }
   }
 
-  return 'Cloud sync failed.'
+  return 'Account data sync failed.'
 }

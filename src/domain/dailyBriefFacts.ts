@@ -1,14 +1,16 @@
 import {
   addIsoDays,
   getCreditCardAllocationSummary,
-  getDebtDueAmountPence,
+  getDebtDueAmountAfterReservesAndLinkedPotsPence,
   getRecurringPaymentOccurrences,
 } from './money.js'
 import type {
   CreditCard,
+  CreditCardPot,
   CreditCardRepayment,
   CustomPayment,
   Debt,
+  DebtReserve,
   DebtPayment,
   PayPeriod,
   Paycheck,
@@ -41,7 +43,9 @@ export interface DailyBriefSnapshotInput {
   transactions?: Transaction[]
   debts?: Debt[]
   debtPayments?: DebtPayment[]
+  debtReserves?: DebtReserve[]
   creditCards?: CreditCard[]
+  creditCardPots?: CreditCardPot[]
   customPayments?: CustomPayment[]
   creditCardRepayments?: CreditCardRepayment[]
   dailyBriefs?: unknown[]
@@ -65,6 +69,8 @@ export interface BriefCreditCard {
   availableCreditPence: number
   utilisationPercent: number
   dueIso: string | null
+  statementDate: string | null
+  statementSetupNeeded: boolean
 }
 
 export interface BriefPot {
@@ -151,7 +157,9 @@ export function getDailyBriefFacts(
   const payPeriods = snapshot.payPeriods ?? []
   const customPayments = snapshot.customPayments ?? []
   const debts = snapshot.debts ?? []
+  const debtReserves = snapshot.debtReserves ?? []
   const creditCards = snapshot.creditCards ?? []
+  const creditCardPots = snapshot.creditCardPots ?? []
   const transactions = snapshot.transactions ?? []
   const creditCardRepayments = snapshot.creditCardRepayments ?? []
   const payPeriod = getCurrentPayPeriod(payPeriods, todayIso)
@@ -162,15 +170,22 @@ export function getDailyBriefFacts(
   const expectedPayPence = payPeriod
     ? (snapshot.paychecks ?? []).find((paycheck) => paycheck.payPeriodId === payPeriod.id)?.calculatedAmountPence ?? null
     : null
-  const recurringDue = getRecurringPaymentOccurrences(recurringPayments, rangeStart, rangeEnd).map((occurrence) => ({
-    id: `recurring-${occurrence.payment.id}-${occurrence.dueDate}`,
-    name: occurrence.payment.name,
-    amountPence: occurrence.amountPence,
-    dueIso: occurrence.dueDate,
-    source: 'recurring' as const,
-    sourceId: occurrence.payment.id,
-    creditCardId: occurrence.payment.creditCardId ?? null,
-  }))
+  const paidRecurringOccurrenceKeys = new Set(
+    transactions
+      .filter((transaction) => transaction.recurringPaymentId && transaction.type === 'spending')
+      .map((transaction) => `${transaction.recurringPaymentId}:${transaction.date}`),
+  )
+  const recurringDue = getRecurringPaymentOccurrences(recurringPayments, rangeStart, rangeEnd)
+    .filter((occurrence) => !paidRecurringOccurrenceKeys.has(`${occurrence.payment.id}:${occurrence.dueDate}`))
+    .map((occurrence) => ({
+      id: `recurring-${occurrence.payment.id}-${occurrence.dueDate}`,
+      name: occurrence.payment.name,
+      amountPence: occurrence.amountPence,
+      dueIso: occurrence.dueDate,
+      source: 'recurring' as const,
+      sourceId: occurrence.payment.id,
+      creditCardId: occurrence.payment.creditCardId ?? null,
+    }))
   const unpaidCustomPayments = customPayments
     .filter((payment) => payment.status === 'unpaid' && payment.dueDate <= rangeEnd)
     .map((payment) => ({
@@ -194,7 +209,7 @@ export function getDailyBriefFacts(
       name: debt.name,
       lender: debt.lender,
       minimumPaymentPence: debt.minimumPaymentPence,
-      amountDuePence: getDebtDueAmountPence(debt),
+      amountDuePence: getDebtDueAmountAfterReservesAndLinkedPotsPence(debt, debtReserves, pots),
       dueIso: debt.dueDate,
     }))
     .sort((a, b) => a.dueIso.localeCompare(b.dueIso) || a.name.localeCompare(b.name))
@@ -215,7 +230,10 @@ export function getDailyBriefFacts(
     customPayments,
     transactions,
     repayments: creditCardRepayments,
+    creditCardPots,
+    pots,
     payPeriod,
+    asOfDate: todayIso,
   })
   const cardLinkedPaymentsPence = duePayments
     .filter((payment) => payment.creditCardId)
@@ -234,10 +252,12 @@ export function getDailyBriefFacts(
     id: cardSummaryItem.card.id,
     name: cardSummaryItem.card.name,
     provider: cardSummaryItem.card.provider,
-    owedPence: cardSummaryItem.owedPence,
-    availableCreditPence: cardSummaryItem.availableCreditPence,
+    owedPence: cardSummaryItem.actualOwedPence,
+    availableCreditPence: cardSummaryItem.actualAvailableCreditPence,
     utilisationPercent: cardSummaryItem.utilisationPercent,
     dueIso: getCreditCardDueIso(cardSummaryItem.card, todayIso),
+    statementDate: cardSummaryItem.statementDate,
+    statementSetupNeeded: cardSummaryItem.statementSetupNeeded,
   }))
   const overspentPots = pots
     .filter((pot) => !pot.archived && pot.balancePence < 0)
@@ -287,7 +307,7 @@ export function getDailyBriefFacts(
     },
     creditCards: {
       cards: creditCardBriefs,
-      totalOwedPence: cardSummary.totalOwedPence,
+      totalOwedPence: cardSummary.totalActualOwedPence,
       minimumsDueBeforeNextPaydayPence: 0,
       unlinkedCardSpendingPence,
       cardLinkedPaymentsPence,
@@ -334,6 +354,10 @@ function getMissingData({
   for (const card of creditCardBriefs) {
     if (card.owedPence > 0 && !card.dueIso) {
       missingData.push(`${card.name} credit card due date is missing.`)
+    }
+
+    if (card.owedPence > 0 && card.statementSetupNeeded) {
+      missingData.push(`${card.name} credit card statement date is missing.`)
     }
   }
 

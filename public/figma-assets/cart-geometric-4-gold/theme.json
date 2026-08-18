@@ -1,0 +1,10 @@
+{
+  "id": "cart-geometric-4-gold",
+  "label": "Geometric 4 Gold",
+  "sourceDesignId": "cart-geometric-4",
+  "sourceNodeId": "1730:4631",
+  "bodyColor": "#d4af37",
+  "topTextColor": "#1c1917",
+  "topMutedColor": "rgba(28, 25, 23, 0.7)",
+  "bottomTextColor": "#ffffff"
+}

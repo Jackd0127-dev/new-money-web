@@ -39,7 +39,7 @@ describe('getDailyBriefFacts', () => {
       }),
     ])
     expect(facts.creditCards).toMatchObject({
-      totalOwedPence: 11800,
+      totalOwedPence: 0,
       minimumsDueBeforeNextPaydayPence: 0,
       unlinkedCardSpendingPence: 3210,
       cardLinkedPaymentsPence: 11800,
@@ -109,6 +109,8 @@ function createSnapshot(overrides: Partial<DailyBriefSnapshotInput> = {}): Daily
       defaultPayPeriodDays: 14,
       hourlyRatePence: 1250,
       defaultHoursWorked: 72,
+      appDateMode: 'automatic',
+      manualTodayIso: null,
       aiInstructions: '',
       aiProvider: 'gemini',
       createdAt: timestamp,
@@ -273,6 +275,7 @@ function createSnapshot(overrides: Partial<DailyBriefSnapshotInput> = {}): Daily
         updatedAt: timestamp,
       },
     ],
+    creditCardPots: [],
     customPayments: [
       {
         id: 'custom-tyres',

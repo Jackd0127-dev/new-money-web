@@ -8,6 +8,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   test: {
     environment: 'jsdom',
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.vercel/**'],
     setupFiles: './src/test/setup.ts',
+    testTimeout: 10_000,
   },
 })

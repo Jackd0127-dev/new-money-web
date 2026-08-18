@@ -1,23 +1,24 @@
-import { useState } from 'react'
-import { CheckCircle2 } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { AlertTriangle, Banknote, CalendarDays, CheckCircle2, Clock3, ReceiptText, WalletCards } from 'lucide-react'
 
 import {
   calculatePaycheckAmount,
   createNextPayPeriod,
   formatPence,
+  getAppTodayIso,
   parsePoundsToPence,
-  toIsoDate,
 } from '../domain/money'
 import type { PlannerActions, PlannerSnapshot } from '../hooks/usePlannerData'
+import { PayPeriodHistoryPanel } from './HistoryPage'
 import {
-  Button,
+  ActionButton,
   Field,
-  MoneyMetric,
+  MetricCard,
   Panel,
+  Pill,
+  SectionGrid,
   SelectInput,
   TextInput,
-  type CalculationBreakdown,
-  type CalculationLine,
 } from '../components/ui'
 import type { PayFrequency, PayPeriod } from '../types/models'
 
@@ -32,7 +33,7 @@ export function PaydayWizardPage({
 }) {
   const initialDraft = getPaydayDraft(
     snapshot,
-    selectedPayPeriod?.payday ?? snapshot.payPeriods[0]?.payday ?? toIsoDate(new Date()),
+    selectedPayPeriod?.payday ?? snapshot.payPeriods[0]?.payday ?? getAppTodayIso(snapshot.settings),
   )
   const [payday, setPayday] = useState(initialDraft.payday)
   const [hoursWorked, setHoursWorked] = useState(initialDraft.hoursWorked)
@@ -41,8 +42,9 @@ export function PaydayWizardPage({
   const [actualReceived, setActualReceived] = useState(initialDraft.actualReceived)
   const [saved, setSaved] = useState(false)
 
+  const hasValidPayday = isValidIsoDateInput(payday)
   const existingPeriod = snapshot.payPeriods.find((candidate) => candidate.payday === payday) ?? null
-  const period = createNextPayPeriod(payday, payFrequency)
+  const period = hasValidPayday ? createNextPayPeriod(payday, payFrequency) : null
   const hours = Number.parseFloat(hoursWorked) || 0
   const hourlyRatePence = parsePoundsToPence(hourlyRate)
   const actualAmountPence = actualReceived ? parsePoundsToPence(actualReceived) : null
@@ -55,7 +57,13 @@ export function PaydayWizardPage({
     hoursWorked: hours,
     hourlyRatePence,
   })
-  const canSubmit = incomePence > 0
+  const canSubmit = hasValidPayday && incomePence > 0
+  const allocationSummary = getPaydayAllocationSummary(snapshot, existingPeriod, incomePence)
+  const periodDisplay = period ? `${period.startDate} to ${period.endDate}` : 'Choose a valid payday'
+  const payToPlanDescription =
+    actualAmountPence === null
+      ? `${hours || 0} hours at ${formatPence(hourlyRatePence)}`
+      : `Actual received replaces the ${formatPence(calculatedPence)} hours estimate.`
 
   function loadPayday(nextPayday: string) {
     const draft = getPaydayDraft(snapshot, nextPayday)
@@ -85,154 +93,218 @@ export function PaydayWizardPage({
   }
 
   return (
-    <div className="max-w-3xl">
-      <Panel title="Payday wizard" description="Enter pay details for this payday.">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Payday">
-            <TextInput
-              type="date"
-              value={payday}
-              onChange={(event) => {
-                loadPayday(event.target.value)
-              }}
+    <div className="min-w-0 space-y-6">
+      <SectionGrid variant="wideLeft" className="gap-5 lg:items-start">
+        <Panel title="Pay planning" description="Build the paycheque plan from payroll details." accent="emerald" density="compact">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Payday">
+              <TextInput
+                type="date"
+                value={payday}
+                onChange={(event) => {
+                  loadPayday(event.target.value)
+                }}
+              />
+            </Field>
+            <Field label="Pay frequency">
+              <SelectInput
+                value={payFrequency}
+                onChange={(event) => {
+                  setPayFrequency(event.target.value as PayFrequency)
+                  setSaved(false)
+                }}
+              >
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="custom">Custom</option>
+              </SelectInput>
+            </Field>
+            <Field label="Hours worked">
+              <TextInput
+                inputMode="decimal"
+                value={hoursWorked}
+                onChange={(event) => {
+                  setHoursWorked(event.target.value)
+                  setSaved(false)
+                }}
+              />
+            </Field>
+            <Field label="Hourly rate">
+              <TextInput
+                inputMode="decimal"
+                value={hourlyRate}
+                onChange={(event) => {
+                  setHourlyRate(event.target.value)
+                  setSaved(false)
+                }}
+              />
+            </Field>
+            <Field label="Actual received">
+              <TextInput
+                inputMode="decimal"
+                placeholder="Leave blank"
+                value={actualReceived}
+                onChange={(event) => {
+                  setActualReceived(event.target.value)
+                  setSaved(false)
+                }}
+              />
+            </Field>
+            <Field label="Pay period">
+              <TextInput value={periodDisplay} disabled />
+            </Field>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <PaydayInfoTile
+              icon={<CalendarDays size={16} />}
+              label="Payday"
+              value={hasValidPayday ? payday : 'Invalid'}
             />
-          </Field>
-          <Field label="Pay frequency">
-            <SelectInput
+            <PaydayInfoTile
+              icon={<Clock3 size={16} />}
+              label="Frequency"
               value={payFrequency}
-              onChange={(event) => {
-                setPayFrequency(event.target.value as PayFrequency)
-                setSaved(false)
-              }}
-            >
-              <option value="weekly">Weekly</option>
-              <option value="biweekly">Biweekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="custom">Custom</option>
-            </SelectInput>
-          </Field>
-          <Field label="Hours worked">
-            <TextInput
-              inputMode="decimal"
-              value={hoursWorked}
-              onChange={(event) => {
-                setHoursWorked(event.target.value)
-                setSaved(false)
-              }}
+              capitalize
             />
-          </Field>
-          <Field label="Hourly rate">
-            <TextInput
-              inputMode="decimal"
-              value={hourlyRate}
-              onChange={(event) => {
-                setHourlyRate(event.target.value)
-                setSaved(false)
-              }}
+            <PaydayInfoTile
+              icon={<CheckCircle2 size={16} />}
+              label="Save mode"
+              value={existingPeriod ? 'Update saved plan' : 'New plan'}
             />
-          </Field>
-          <Field label="Actual received" hint="Optional. If payroll differs, this overrides the estimate.">
-            <TextInput
-              inputMode="decimal"
-              placeholder="Leave blank"
-              value={actualReceived}
-              onChange={(event) => {
-                setActualReceived(event.target.value)
-                setSaved(false)
-              }}
-            />
-          </Field>
-          <Field label="Pay period">
-            <TextInput value={`${period.startDate} to ${period.endDate}`} disabled />
-          </Field>
-        </div>
+          </div>
+        </Panel>
 
-        <div className="mt-5">
-          <MoneyMetric
-            label="Pay to plan"
-            value={formatPence(incomePence)}
-            tone="primary"
-            breakdown={getPayToPlanBreakdown({
-              actualAmountPence,
-              calculatedPence,
-              hourlyRatePence,
-              hours,
-              incomePence,
-            })}
-          />
-        </div>
+        <Panel
+          title="Pay plan summary"
+          description={period ? periodDisplay : 'Choose a valid payday.'}
+          accent={allocationSummary.isOverallocated ? 'amber' : 'blue'}
+          density="compact"
+          className="lg:sticky lg:top-24"
+        >
+          <div className="space-y-4">
+            <MetricCard
+              label="Pay to plan"
+              value={formatPence(incomePence)}
+              tone="primary"
+              detail={payToPlanDescription}
+            />
 
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Button disabled={!canSubmit || saved} onClick={submitPlan}>
-            {existingPeriod ? 'Update paycheck plan' : 'Confirm paycheck plan'}
-          </Button>
-          <span className="rounded-md bg-slate-100 px-3 py-2 text-sm font-medium capitalize text-slate-700">
-            {payFrequency} plan
-          </span>
-          {saved && (
-            <span className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700">
-              <CheckCircle2 size={18} />
-              Saved locally
-            </span>
-          )}
-        </div>
-      </Panel>
+            <div className="grid gap-3">
+              <PaydaySummaryRow
+                icon={<ReceiptText size={16} />}
+                label="Reserved bills"
+                value={formatPence(allocationSummary.reservedBillsPence)}
+                detail={existingPeriod ? 'Saved recurring reserves for this payday.' : 'No saved bills yet.'}
+              />
+              <PaydaySummaryRow
+                icon={<WalletCards size={16} />}
+                label="Manual allocations"
+                value={formatPence(allocationSummary.manualAllocationsPence)}
+                detail={existingPeriod ? 'Saved pot top-ups and manual allocations.' : 'No manual allocations yet.'}
+              />
+              <PaydaySummaryRow
+                icon={<Banknote size={16} />}
+                label="Left unassigned"
+                value={formatPence(allocationSummary.leftUnassignedPence)}
+                detail={`${formatPence(allocationSummary.allocatedPence)} allocated from this paycheque.`}
+                tone={allocationSummary.isOverallocated ? 'warning' : 'success'}
+              />
+            </div>
+
+            {allocationSummary.isOverallocated && (
+              <div className="flex gap-3 rounded-[var(--radius-control)] border border-[color:rgba(183,121,31,0.28)] bg-[color:rgba(183,121,31,0.08)] p-3 text-sm text-[var(--color-warning)]" role="alert">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                <p className="font-medium">
+                  This paycheque is overallocated by {formatPence(allocationSummary.overallocatedPence)}.
+                </p>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <ActionButton disabled={!canSubmit || saved} onClick={submitPlan}>
+                {existingPeriod ? 'Update paycheque plan' : 'Confirm paycheque plan'}
+              </ActionButton>
+              <Pill tone={canSubmit ? 'success' : 'warning'} icon={<WalletCards size={14} />} className="capitalize">
+                {payFrequency} plan
+              </Pill>
+              {saved && (
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-[var(--color-success)]">
+                  <CheckCircle2 size={18} aria-hidden="true" />
+                  Saved locally
+                </span>
+              )}
+            </div>
+          </div>
+        </Panel>
+      </SectionGrid>
+
+      <PayPeriodHistoryPanel snapshot={snapshot} actions={actions} />
     </div>
   )
 }
 
-function getPayToPlanBreakdown({
-  actualAmountPence,
-  calculatedPence,
-  hourlyRatePence,
-  hours,
-  incomePence,
+function PaydayInfoTile({
+  icon,
+  label,
+  value,
+  capitalize = false,
 }: {
-  actualAmountPence: number | null
-  calculatedPence: number
-  hourlyRatePence: number
-  hours: number
-  incomePence: number
-}): CalculationBreakdown {
-  const lines: CalculationLine[] = [
-    {
-      label: 'Hours worked',
-      value: String(hours),
-      tone: 'muted' as const,
-    },
-    {
-      label: 'Hourly rate',
-      value: formatPence(hourlyRatePence),
-      tone: 'muted' as const,
-    },
-    {
-      label: 'Hours estimate',
-      value: formatPence(calculatedPence),
-      detail: `${hours} hours × ${formatPence(hourlyRatePence)} per hour.`,
-      tone: 'add' as const,
-    },
-  ]
+  icon: ReactNode
+  label: string
+  value: string
+  capitalize?: boolean
+}) {
+  return (
+    <div className="rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-3 py-2">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+        <span className="text-[var(--color-emerald)]">{icon}</span>
+        {label}
+      </div>
+      <p className={['mt-1 truncate text-sm font-semibold text-[var(--color-text-primary)]', capitalize ? 'capitalize' : ''].join(' ')}>
+        {value}
+      </p>
+    </div>
+  )
+}
 
-  if (actualAmountPence !== null) {
-    lines.push({
-      label: 'Actual received override',
-      value: formatPence(actualAmountPence),
-      detail: 'Because actual received is filled in, this replaces the hours estimate.',
-      tone: 'result' as const,
-    })
-  }
-
-  lines.push({
-    label: 'Pay to plan',
-    value: formatPence(incomePence),
-    tone: 'result' as const,
-  })
-
-  return {
-    formula: actualAmountPence === null ? 'Pay to plan = hours worked × hourly rate.' : 'Pay to plan = actual received.',
-    lines,
-    note: 'This is the income saved to the paycheck plan when you confirm or update it.',
-  }
+function PaydaySummaryRow({
+  icon,
+  label,
+  value,
+  detail,
+  tone = 'neutral',
+}: {
+  icon: ReactNode
+  label: string
+  value: string
+  detail: string
+  tone?: 'neutral' | 'success' | 'warning'
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+      <div className="flex min-w-0 gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-soft)] text-[var(--color-emerald)]">
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[var(--color-text-primary)]">{label}</p>
+          <p className="mt-0.5 text-xs leading-5 text-[var(--color-text-muted)]">{detail}</p>
+        </div>
+      </div>
+      <p
+        className={[
+          'shrink-0 text-sm font-semibold',
+          tone === 'warning' ? 'text-[var(--color-warning)]' : '',
+          tone === 'success' ? 'text-[var(--color-success)]' : '',
+          tone === 'neutral' ? 'text-[var(--color-text-primary)]' : '',
+        ].join(' ')}
+      >
+        {value}
+      </p>
+    </div>
+  )
 }
 
 function getPaydayDraft(snapshot: PlannerSnapshot, payday: string) {
@@ -260,6 +332,40 @@ function getPaydayDraft(snapshot: PlannerSnapshot, payday: string) {
         ? ''
         : (paycheck.actualAmountPence / 100).toFixed(2),
   }
+}
+
+function getPaydayAllocationSummary(snapshot: PlannerSnapshot, period: PayPeriod | null, incomePence: number) {
+  const allocations = period
+    ? snapshot.potAllocations.filter((allocation) => allocation.payPeriodId === period.id)
+    : []
+  const reservedBillsPence = allocations
+    .filter((allocation) => allocation.source === 'recurring' || Boolean(allocation.recurringPaymentId))
+    .reduce((total, allocation) => total + allocation.amountPence, 0)
+  const manualAllocationsPence = allocations
+    .filter((allocation) => allocation.source !== 'recurring' && !allocation.recurringPaymentId)
+    .reduce((total, allocation) => total + allocation.amountPence, 0)
+  const allocatedPence = reservedBillsPence + manualAllocationsPence
+  const leftUnassignedPence = incomePence - allocatedPence
+  const overallocatedPence = Math.max(0, -leftUnassignedPence)
+
+  return {
+    reservedBillsPence,
+    manualAllocationsPence,
+    allocatedPence,
+    leftUnassignedPence,
+    overallocatedPence,
+    isOverallocated: overallocatedPence > 0,
+  }
+}
+
+function isValidIsoDateInput(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`)
+
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 
 function inferPayFrequency(period: PayPeriod): PayFrequency {

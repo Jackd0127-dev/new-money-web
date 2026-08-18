@@ -50,9 +50,10 @@ export interface AssistantAppContext {
 
 const viewLabels: Record<ViewKey, string> = {
   dashboard: 'Dashboard',
-  aiPlan: 'AI Plan',
-  payday: 'Payday',
+  aiPlan: 'AI',
+  payday: 'Pay day',
   pots: 'Pots',
+  savingsInvestments: 'Savings & Investments',
   spending: 'Spending',
   allocatingPayments: 'Allocating Payments',
   debts: 'Debts',
@@ -81,7 +82,11 @@ export function buildAssistantAppContext({
     transactions: snapshot.transactions,
     debts: snapshot.debts,
     creditCardRepayments: snapshot.creditCardRepayments,
+    creditCardPots: snapshot.creditCardPots,
     debtReserves: snapshot.debtReserves,
+    pots: snapshot.pots,
+    potAllocations: snapshot.potAllocations,
+    asOfDate: todayIso,
   })
   const creditCards = getCreditCardAllocationSummary({
     creditCards: snapshot.creditCards,
@@ -89,7 +94,10 @@ export function buildAssistantAppContext({
     customPayments: snapshot.customPayments,
     transactions: snapshot.transactions,
     repayments: snapshot.creditCardRepayments,
+    creditCardPots: snapshot.creditCardPots,
+    pots: snapshot.pots,
     payPeriod: selectedPayPeriod,
+    asOfDate: todayIso,
   })
   const debts = getDebtSummary(
     snapshot.debts,
@@ -97,6 +105,7 @@ export function buildAssistantAppContext({
     todayIso,
     selectedPayPeriod,
     snapshot.debtReserves,
+    snapshot.pots,
   )
   const debtPlans = getDebtReservePlans({
     allDebts: snapshot.debts,
@@ -106,8 +115,11 @@ export function buildAssistantAppContext({
     recurringPayments: snapshot.recurringPayments,
     customPayments: snapshot.customPayments,
     transactions: snapshot.transactions,
+    creditCardPots: snapshot.creditCardPots,
     creditCardRepayments: snapshot.creditCardRepayments,
     debtReserves: snapshot.debtReserves,
+    pots: snapshot.pots,
+    potAllocations: snapshot.potAllocations,
   })
 
   return {
@@ -136,6 +148,8 @@ export function buildAssistantAppContext({
         plannedDebtReserves: snapshot.debtReserves.filter((reserve) => reserve.status === 'planned').length,
         creditCards: snapshot.creditCards.length,
         activeCreditCards: snapshot.creditCards.filter((card) => !card.archived).length,
+        creditCardPots: snapshot.creditCardPots.length,
+        activeCreditCardPots: snapshot.creditCardPots.filter((pot) => pot.status === 'active').length,
         customPayments: snapshot.customPayments.length,
         dailyBriefs: snapshot.dailyBriefs.length,
       },
@@ -147,10 +161,13 @@ export function buildAssistantAppContext({
         plannedDebtReservePence: snapshot.debtReserves
           .filter((reserve) => reserve.status === 'planned')
           .reduce((total, reserve) => total + reserve.amountPence, 0),
+        activeCreditCardPotPence: snapshot.creditCardPots
+          .filter((creditCardPot) => creditCardPot.status === 'active')
+          .reduce((total, creditCardPot) => total + creditCardPot.amountPence, 0),
         selectedPayPence: dashboard.payReceivedPence,
         selectedTotalCostsPence: dashboard.totalCostsPence,
         selectedMoneyLeftPence: dashboard.moneyLeftPence,
-        selectedCreditCardOwedPence: creditCards.totalOwedPence,
+        selectedCreditCardOwedPence: creditCards.totalActualOwedPence,
       },
       settings: {
         payFrequency: snapshot.settings.payFrequency,
@@ -207,6 +224,7 @@ function getFocusedTabContext(
     case 'pots':
       return {
         pots: snapshot.pots,
+        creditCardPots: snapshot.creditCardPots,
         potAllocations: snapshot.potAllocations,
         potTransactions: snapshot.transactions.filter((transaction) => transaction.potId),
       }
@@ -226,6 +244,7 @@ function getFocusedTabContext(
       return {
         selectedPayPeriod,
         creditCards,
+        creditCardPots: snapshot.creditCardPots,
         customPayments: snapshot.customPayments,
         creditCardRepayments: snapshot.creditCardRepayments,
       }
@@ -236,6 +255,7 @@ function getFocusedTabContext(
         debtRecords: snapshot.debts,
         debtPayments: snapshot.debtPayments,
         debtReserves: snapshot.debtReserves,
+        creditCardPots: snapshot.creditCardPots,
       }
     case 'recurring':
       return {
@@ -252,6 +272,7 @@ function getFocusedTabContext(
         customPayments: snapshot.customPayments,
         debts: snapshot.debts,
         debtReserves: snapshot.debtReserves,
+        creditCardPots: snapshot.creditCardPots,
       }
     case 'history':
       return {
@@ -259,6 +280,7 @@ function getFocusedTabContext(
         paychecks: snapshot.paychecks,
         potAllocations: snapshot.potAllocations,
         debtPayments: snapshot.debtPayments,
+        creditCardPots: snapshot.creditCardPots,
       }
     case 'settings':
       return {
@@ -268,6 +290,7 @@ function getFocusedTabContext(
           recurringPayments: snapshot.recurringPayments.length,
           debts: snapshot.debts.length,
           creditCards: snapshot.creditCards.length,
+          creditCardPots: snapshot.creditCardPots.length,
         },
       }
   }

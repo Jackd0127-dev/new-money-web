@@ -1,9 +1,4 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 import { GoogleGenAI, Type } from '@google/genai'
-import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 
 import { formatPence } from '../src/domain/money.js'
@@ -13,27 +8,11 @@ import {
   type DailyBriefFacts,
   type DailyBriefSnapshotInput,
 } from '../src/domain/dailyBriefFacts.js'
+import { getBearerToken, getSafeErrorName, initializeFirebaseAdmin } from '../server/firebaseAdmin.js'
+import { isRequestBodyTooLarge, setSecureApiHeaders } from '../server/apiSecurity.js'
+import { readAiInstruction } from '../server/aiInstructions.js'
 
-const dailyBriefInstructionsPath = join(dirname(fileURLToPath(import.meta.url)), 'daily-brief-instructions.md')
-
-const systemInstruction = `
-You are a financial brief writer inside a private paycheck-planner app.
-You do not calculate final balances unless the snapshot explicitly provides the calculated value.
-You explain and prioritise the provided facts.
-Use only the provided planner snapshot.
-Never invent missing data.
-Never provide tax, legal, regulated investment, credit product, debt restructuring, or lending advice.
-Never suggest borrowing money, taking credit, investing, or changing legal/tax arrangements.
-Your job is to produce a short, practical daily money brief focused on:
-- pay received in the current pay period
-- payments due today or soon
-- credit card amounts owed and card-linked payments
-- upcoming risks before next payday
-- overspent or low pots
-- specific actions for today and next steps
-Write in UK English.
-Use GBP formatting.
-`.trim()
+const systemInstruction = readAiInstruction('daily-brief-system.md')
 
 const dailyBriefResponseSchema = {
   type: Type.OBJECT,
@@ -91,9 +70,15 @@ interface DailyBriefRequestBody {
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
+  setSecureApiHeaders(res)
+
   if (req.method !== 'POST') {
     res.setHeader?.('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (isRequestBodyTooLarge(req.body)) {
+    return res.status(413).json({ error: 'Request body is too large.' })
   }
 
   const idToken = getBearerToken(req.headers.authorization)
@@ -107,11 +92,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   try {
     initializeFirebaseAdmin()
-    await getAuth().verifyIdToken(idToken)
+    await getAuth().verifyIdToken(idToken, true)
   } catch (error) {
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Unable to verify planner access',
-    })
+    console.error('Daily brief access verification failed', { reason: getSafeErrorName(error) })
+    return res.status(401).json({ error: 'Unable to verify planner access.' })
   }
 
   const briefSnapshot = toBriefSnapshotInput(body.snapshot)
@@ -224,38 +208,6 @@ async function generateOpenRouterJson({
   return content.trim()
 }
 
-function initializeFirebaseAdmin() {
-  if (getApps().length > 0) {
-    return
-  }
-
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-
-  if (!serviceAccountJson) {
-    throw new Error('Firebase service account is not configured')
-  }
-
-  const serviceAccount = JSON.parse(serviceAccountJson) as Record<string, unknown>
-
-  if (typeof serviceAccount.private_key === 'string') {
-    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n')
-  }
-
-  initializeApp({
-    credential: cert(serviceAccount),
-  })
-}
-
-function getBearerToken(value: string | string[] | undefined): string | null {
-  const header = Array.isArray(value) ? value[0] : value
-
-  if (!header?.startsWith('Bearer ')) {
-    return null
-  }
-
-  return header.slice('Bearer '.length).trim() || null
-}
-
 function parseBody(body: unknown): DailyBriefRequestBody {
   if (typeof body === 'string') {
     try {
@@ -292,11 +244,7 @@ function buildPrompt({
 }
 
 function getDailyBriefInstructions(): string {
-  try {
-    return readFileSync(dailyBriefInstructionsPath, 'utf8').trim()
-  } catch {
-    return ''
-  }
+  return readAiInstruction('daily-brief-editable.md')
 }
 
 function extractGeminiText(response: unknown): string {
@@ -338,6 +286,7 @@ function parseDailyBriefResponse(value: string): DailyBriefAiResponse {
   }
 
   const response = parsed as Partial<DailyBriefAiResponse>
+  const confidence = response.confidence
 
   if (
     typeof response.summary !== 'string' ||
@@ -345,7 +294,7 @@ function parseDailyBriefResponse(value: string): DailyBriefAiResponse {
     !isStringArray(response.today) ||
     !isStringArray(response.next) ||
     !isStringArray(response.missingData) ||
-    !['high', 'medium', 'low'].includes(String(response.confidence))
+    !isDailyBriefConfidence(confidence)
   ) {
     throw new Error('Gemini returned an invalid daily brief shape.')
   }
@@ -356,7 +305,7 @@ function parseDailyBriefResponse(value: string): DailyBriefAiResponse {
     today: cleanList(response.today),
     next: cleanList(response.next),
     missingData: cleanList(response.missingData),
-    confidence: response.confidence,
+    confidence,
   }
 }
 
@@ -432,4 +381,8 @@ function cleanList(items: string[]): string[] {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isDailyBriefConfidence(value: unknown): value is DailyBriefAiResponse['confidence'] {
+  return value === 'high' || value === 'medium' || value === 'low'
 }

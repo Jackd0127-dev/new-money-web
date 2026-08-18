@@ -1,0 +1,10 @@
+{
+  "id": "cart-geometric-4-maroon",
+  "label": "Geometric 4 Maroon",
+  "sourceDesignId": "cart-geometric-4",
+  "sourceNodeId": "1730:4631",
+  "bodyColor": "#7f1d1d",
+  "topTextColor": "#fff7ed",
+  "topMutedColor": "rgba(255, 247, 237, 0.76)",
+  "bottomTextColor": "#ffffff"
+}

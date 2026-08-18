@@ -8,10 +8,20 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.npm-cache
 dist
 dist-ssr
+coverage
+playwright-report
+test-results
 .firebase
 *.local
+
+# Local design/export artifacts
+credit cards/
+figma-plugin-figma-openai-curated-*/
+src/pages/* 2.tsx
+public/figma-assets/*/noise.png
 
 # Editor directories and files
 .vscode/*

@@ -6,9 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "check": "npm run lint && npm run test && npm run build",
+    "check:backend": "npm run test:backend && npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:backend": "vitest run src/domain src/storage src/firebase api src/hooks/__tests__/useCloudSync.test.tsx src/hooks/__tests__/useFirebaseAuth.test.tsx",
+    "test:ui": "vitest run src/__tests__ src/components/__tests__ src/pages/__tests__ src/hooks/__tests__/useDailyBrief.test.tsx"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -18,8 +22,7 @@
     "firebase-admin": "^13.10.0",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "recharts": "^3.8.1"
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -42,5 +45,8 @@
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
     "vitest": "^4.1.6"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

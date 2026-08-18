@@ -1,0 +1,10 @@
+{
+  "id": "cart-geometric-4-blue",
+  "label": "Geometric 4 Blue",
+  "sourceDesignId": "cart-geometric-4",
+  "sourceNodeId": "1730:4631",
+  "bodyColor": "#2563eb",
+  "topTextColor": "#f8fbff",
+  "topMutedColor": "rgba(248, 251, 255, 0.76)",
+  "bottomTextColor": "#ffffff"
+}

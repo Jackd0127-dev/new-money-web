@@ -65,10 +65,18 @@ export function hasMeaningfulPlannerData(snapshot: PlannerSnapshot): boolean {
     snapshot.debtPayments.length > 0 ||
     (snapshot.debtReserves?.length ?? 0) > 0 ||
     (snapshot.creditCards?.length ?? 0) > 0 ||
+    (snapshot.creditCardPots?.length ?? 0) > 0 ||
     (snapshot.customPayments?.length ?? 0) > 0 ||
     (snapshot.creditCardRepayments?.length ?? 0) > 0 ||
     (snapshot.dailyBriefs?.length ?? 0) > 0 ||
-    snapshot.pots.some((pot) => pot.balancePence !== 0 || pot.archived)
+    snapshot.pots.some(
+      (pot) =>
+        pot.balancePence !== 0 ||
+        (pot.targetPence ?? 0) > 0 ||
+        Boolean(pot.linkedCreditCardId) ||
+        Boolean(pot.linkedDebtId) ||
+        pot.archived,
+    )
   )
 }
 
@@ -85,6 +93,7 @@ export function getPlannerSnapshotUpdatedAtIso(snapshot: PlannerSnapshot): strin
     ...snapshot.debtPayments.map((item) => item.updatedAt),
     ...snapshot.debtReserves.map((item) => item.updatedAt),
     ...snapshot.creditCards.map((item) => item.updatedAt),
+    ...(snapshot.creditCardPots ?? []).map((item) => item.updatedAt),
     ...snapshot.customPayments.map((item) => item.updatedAt),
     ...snapshot.creditCardRepayments.map((item) => item.updatedAt),
     ...snapshot.dailyBriefs.map((item) => item.updatedAt),
@@ -115,16 +124,30 @@ function normalizePlannerSnapshot(snapshot: Partial<PlannerSnapshot>): PlannerSn
       aiInstructions: snapshot.settings?.aiInstructions ?? defaultSettings.aiInstructions,
       aiProvider: snapshot.settings?.aiProvider ?? defaultSettings.aiProvider,
     },
-    pots: snapshot.pots ?? [],
+    pots: (snapshot.pots ?? []).map((pot) => ({
+      ...pot,
+      category: pot.category ?? null,
+      icon: pot.icon ?? null,
+      linkedCreditCardId: pot.linkedCreditCardId ?? null,
+      linkedDebtId: pot.linkedDebtId ?? null,
+    })),
     recurringPayments: snapshot.recurringPayments ?? [],
     payPeriods: snapshot.payPeriods ?? [],
     paychecks: snapshot.paychecks ?? [],
-    potAllocations: snapshot.potAllocations ?? [],
+    potAllocations: (snapshot.potAllocations ?? []).map((allocation) => ({
+      ...allocation,
+      fundingPotId: allocation.fundingPotId ?? null,
+    })),
     transactions: snapshot.transactions ?? [],
     debts: snapshot.debts ?? [],
     debtPayments: snapshot.debtPayments ?? [],
     debtReserves: snapshot.debtReserves ?? [],
-    creditCards: snapshot.creditCards ?? [],
+    creditCards: (snapshot.creditCards ?? []).map((card) => ({
+      ...card,
+      openingStatementBalancePence: Math.max(0, card.openingStatementBalancePence ?? card.openingBalancePence ?? 0),
+      statementDate: card.statementDate ?? null,
+    })),
+    creditCardPots: snapshot.creditCardPots ?? [],
     customPayments: snapshot.customPayments ?? [],
     creditCardRepayments: snapshot.creditCardRepayments ?? [],
     dailyBriefs: snapshot.dailyBriefs ?? [],

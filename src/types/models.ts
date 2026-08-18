@@ -2,6 +2,8 @@ export type PayFrequency = 'weekly' | 'biweekly' | 'monthly' | 'custom'
 
 export type AiProvider = 'gemini' | 'openrouter'
 
+export type AppDateMode = 'automatic' | 'manual'
+
 export type PotType = 'spending' | 'reserved' | 'saving' | 'investment' | 'buffer'
 
 export type RecurringFrequency = 'weekly' | 'biweekly' | 'monthly' | 'yearly'
@@ -11,12 +13,17 @@ export type RecurringPriority = 'essential' | 'important' | 'optional'
 export type PayPeriodStatus = 'planned' | 'active' | 'closed'
 
 export type TransactionType = 'spending' | 'allocation' | 'transfer' | 'adjustment'
+export type PotAllocationSource = 'manual' | 'recurring' | 'pot_auto'
 
 export type DebtStatus = 'active' | 'paid' | 'archived'
 
 export type PaymentMethod = 'pot' | 'credit_card'
 
 export type CustomPaymentStatus = 'unpaid' | 'paid' | 'archived'
+
+export type CreditCardPotSource = 'paycheck' | 'external'
+
+export type CreditCardPotStatus = 'active' | 'applied' | 'cancelled'
 
 export type DebtReserveStatus = 'planned' | 'skipped' | 'applied' | 'cancelled'
 
@@ -35,6 +42,8 @@ export interface Settings extends Timestamped {
   defaultPayPeriodDays: number
   hourlyRatePence: number
   defaultHoursWorked: number
+  appDateMode: AppDateMode
+  manualTodayIso: string | null
   aiInstructions: string
   aiProvider: AiProvider
 }
@@ -43,9 +52,13 @@ export interface Pot extends Timestamped {
   id: string
   name: string
   type: PotType
+  category?: string | null
+  icon?: string | null
   balancePence: number
   targetPence: number | null
   color: string
+  linkedCreditCardId?: string | null
+  linkedDebtId?: string | null
   archived: boolean
 }
 
@@ -56,7 +69,7 @@ export interface RecurringPayment extends Timestamped {
   dueDay?: number
   dueDate?: string
   frequency: RecurringFrequency
-  potId: string
+  potId: string | null
   creditCardId?: string | null
   priority: RecurringPriority
   active: boolean
@@ -86,8 +99,9 @@ export interface PotAllocation extends Timestamped {
   id: string
   payPeriodId: string
   potId: string
+  fundingPotId?: string | null
   amountPence: number
-  source?: 'manual' | 'recurring'
+  source?: PotAllocationSource
   recurringPaymentId?: string | null
 }
 
@@ -99,6 +113,7 @@ export interface Transaction extends Timestamped {
   type: TransactionType
   paymentMethod?: PaymentMethod
   creditCardId?: string | null
+  recurringPaymentId?: string | null
   date: string
   note: string
 }
@@ -142,6 +157,10 @@ export interface CreditCard extends Timestamped {
   name: string
   provider: string
   limitPence: number
+  openingBalancePence?: number
+  openingStatementBalancePence?: number
+  statementDate?: string | null
+  designId?: string | null
   dueDay?: number | null
   dueDate?: string | null
   color: string
@@ -162,6 +181,20 @@ export interface CreditCardRepayment extends Timestamped {
   creditCardId: string
   amountPence: number
   date: string
+  note: string
+}
+
+export interface CreditCardPot extends Timestamped {
+  id: string
+  creditCardId: string
+  payPeriodId: string | null
+  payday: string | null
+  periodStartDate: string | null
+  periodEndDate: string | null
+  name: string
+  amountPence: number
+  source: CreditCardPotSource
+  status: CreditCardPotStatus
   note: string
 }
 

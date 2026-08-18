@@ -1,8 +1,9 @@
-import { Trash2 } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { CalendarDays, CircleDollarSign, Trash2, WalletCards } from 'lucide-react'
 
 import { formatPence } from '../domain/money'
 import type { PlannerActions, PlannerSnapshot } from '../hooks/usePlannerData'
-import { Button, CalculationDetails, Panel, type CalculationBreakdown } from '../components/ui'
+import { Button, CalculationDetails, Panel, ProgressRail, type CalculationBreakdown } from '../components/ui'
 
 export function HistoryPage({
   snapshot,
@@ -11,6 +12,25 @@ export function HistoryPage({
   snapshot: PlannerSnapshot
   actions: PlannerActions
 }) {
+  return <PayPeriodHistoryPanel snapshot={snapshot} actions={actions} />
+}
+
+export function PayPeriodHistoryPanel({
+  snapshot,
+  actions,
+}: {
+  snapshot: PlannerSnapshot
+  actions: PlannerActions
+}) {
+  const totalIncomePence = snapshot.payPeriods.reduce((total, period) => total + period.incomePence, 0)
+  const totalAllocatedPence = snapshot.payPeriods.reduce((total, period) => {
+    const allocated = snapshot.potAllocations
+      .filter((allocation) => allocation.payPeriodId === period.id)
+      .reduce((allocationTotal, allocation) => allocationTotal + allocation.amountPence, 0)
+
+    return total + allocated
+  }, 0)
+
   async function deletePeriod(periodId: string, payday: string) {
     if (window.confirm(`Delete paycheck plan for ${payday}?`)) {
       await actions.deletePayPeriod(periodId)
@@ -18,10 +38,16 @@ export function HistoryPage({
   }
 
   return (
-    <Panel title="Pay period history" description="Previous paycheck plans and their allocations.">
-      <div className="overflow-hidden rounded-lg border border-slate-200">
+    <Panel title="Pay period history" description="Previous paycheck plans and their allocations." accent="blue" className="min-w-0">
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
+        <HistoryStat icon={<CalendarDays size={17} />} label="Paychecks" value={String(snapshot.payPeriods.length)} tone="blue" />
+        <HistoryStat icon={<CircleDollarSign size={17} />} label="Total income" value={formatPence(totalIncomePence)} tone="emerald" />
+        <HistoryStat icon={<WalletCards size={17} />} label="Total allocated" value={formatPence(totalAllocatedPence)} tone="violet" />
+      </div>
+
+      <div className="w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-slate-200/90 bg-white/95 shadow-[0_18px_48px_rgba(15,23,42,0.065)]">
         <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-slate-50/90 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 font-semibold">Payday</th>
               <th className="px-4 py-3 font-semibold">Period</th>
@@ -31,15 +57,16 @@ export function HistoryPage({
               <th className="px-4 py-3 font-semibold">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white">
+          <tbody className="divide-y divide-slate-200/80 bg-white/95">
             {snapshot.payPeriods.length > 0 ? (
               snapshot.payPeriods.map((period) => {
                 const allocated = snapshot.potAllocations
                   .filter((allocation) => allocation.payPeriodId === period.id)
                   .reduce((total, allocation) => total + allocation.amountPence, 0)
+                const rowAllocationPercent = period.incomePence > 0 ? Math.round((allocated / period.incomePence) * 100) : 0
 
                 return (
-                  <tr key={period.id}>
+                  <tr key={period.id} className="transition hover:bg-slate-50/80">
                     <td className="px-4 py-3 font-medium text-slate-950">{period.payday}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {period.startDate} to {period.endDate}
@@ -49,7 +76,13 @@ export function HistoryPage({
                       <details>
                         <summary className="cursor-pointer list-none font-semibold text-slate-950">
                           {formatPence(allocated)}
+                          <span className="ml-2 text-xs font-semibold text-slate-500">{rowAllocationPercent}%</span>
                         </summary>
+                        <ProgressRail
+                          percent={rowAllocationPercent}
+                          className="mt-2"
+                          trackClassName="h-1.5 bg-slate-100 shadow-slate-200/80"
+                        />
                         <CalculationDetails
                           breakdown={getHistoryAllocationBreakdown(
                             snapshot.potAllocations.filter((allocation) => allocation.payPeriodId === period.id),
@@ -58,7 +91,11 @@ export function HistoryPage({
                         />
                       </details>
                     </td>
-                    <td className="px-4 py-3 capitalize text-slate-600">{period.status}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-xl border border-slate-200/80 bg-white/80 px-2 py-1 text-xs font-semibold capitalize text-slate-600 shadow-sm shadow-slate-200/50">
+                        {period.status}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <Button
                         variant="danger"
@@ -82,6 +119,35 @@ export function HistoryPage({
         </table>
       </div>
     </Panel>
+  )
+}
+
+function HistoryStat({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: ReactNode
+  label: string
+  value: string
+  tone: 'blue' | 'emerald' | 'violet'
+}) {
+  const toneClassName =
+    tone === 'emerald'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : tone === 'violet'
+        ? 'border-violet-200 bg-violet-50 text-violet-700'
+        : 'border-blue-200 bg-blue-50 text-blue-700'
+
+  return (
+    <div className={`min-w-0 rounded-2xl border p-4 shadow-[0_14px_35px_rgba(15,23,42,0.05)] ${toneClassName}`}>
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+        {icon}
+        {label}
+      </div>
+      <p className="mt-2 text-xl font-semibold tracking-[-0.02em] text-slate-950">{value}</p>
+    </div>
   )
 }
 

@@ -1,0 +1,10 @@
+{
+  "id": "cart-geometric-4-teal",
+  "label": "Geometric 4 Teal",
+  "sourceDesignId": "cart-geometric-4",
+  "sourceNodeId": "1730:4631",
+  "bodyColor": "#14b8a6",
+  "topTextColor": "#0f172a",
+  "topMutedColor": "rgba(15, 23, 42, 0.68)",
+  "bottomTextColor": "#ffffff"
+}

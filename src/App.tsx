@@ -1,7 +1,10 @@
 import { useState, type ReactNode } from 'react'
+import { Plus } from 'lucide-react'
 
 import { AppAssistant } from './components/AppAssistant'
+import { AuthScreen } from './components/AuthScreen'
 import { AppShell } from './components/AppShell'
+import { Button } from './components/ui'
 import { AiPlanPage } from './pages/AiPlanPage'
 import { AllocatingPaymentsPage } from './pages/AllocatingPaymentsPage'
 import { CalendarPage } from './pages/CalendarPage'
@@ -11,9 +14,10 @@ import { HistoryPage } from './pages/HistoryPage'
 import { PaydayWizardPage } from './pages/PaydayWizardPage'
 import { PotsPage } from './pages/PotsPage'
 import { RecurringPage } from './pages/RecurringPage'
+import { SavingsInvestmentsPage } from './pages/SavingsInvestmentsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SpendingPage } from './pages/SpendingPage'
-import { findPayPeriodForDate, toIsoDate } from './domain/money'
+import { findPayPeriodForDate, getAppTodayIso } from './domain/money'
 import { useCloudSync } from './hooks/useCloudSync'
 import { useFirebaseAuth } from './hooks/useFirebaseAuth'
 import { usePlannerData } from './hooks/usePlannerData'
@@ -22,13 +26,20 @@ import type { ViewKey } from './types/navigation'
 function App() {
   const [activeView, setActiveView] = useState<ViewKey>('dashboard')
   const [selectedPayPeriodId, setSelectedPayPeriodId] = useState<string | null>(null)
+  const [isCreatePotModalOpen, setIsCreatePotModalOpen] = useState(false)
+  const [isCreateRecurringOpen, setIsCreateRecurringOpen] = useState(false)
   const { snapshot, isLoading, error, actions } = usePlannerData()
   const auth = useFirebaseAuth()
-  const sync = useCloudSync({
+  const cloudSync = useCloudSync({
     user: auth.user,
     snapshot,
     refresh: actions.refresh,
   })
+
+  if (auth.isLoading || !auth.isConfigured || !auth.user) {
+    return <AuthScreen auth={auth} />
+  }
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
@@ -51,7 +62,7 @@ function App() {
     )
   }
 
-  const today = toIsoDate(new Date())
+  const today = getAppTodayIso(snapshot.settings)
   const selectedPayPeriod =
     (selectedPayPeriodId
       ? snapshot.payPeriods.find((period) => period.id === selectedPayPeriodId)
@@ -63,33 +74,83 @@ function App() {
       <DashboardPage
         snapshot={snapshot}
         selectedPayPeriod={selectedPayPeriod}
+        actions={actions}
         onPayPeriodChange={setSelectedPayPeriodId}
         onViewChange={setActiveView}
       />
     ),
-    aiPlan: <AiPlanPage snapshot={snapshot} actions={actions} selectedPayPeriod={selectedPayPeriod} user={auth.user} />,
+    aiPlan: <AiPlanPage snapshot={snapshot} selectedPayPeriod={selectedPayPeriod} user={auth.user} actions={actions} />,
     payday: <PaydayWizardPage snapshot={snapshot} actions={actions} selectedPayPeriod={selectedPayPeriod} />,
-    pots: <PotsPage snapshot={snapshot} actions={actions} />,
+    pots: (
+      <PotsPage
+        snapshot={snapshot}
+        actions={actions}
+        selectedPayPeriod={selectedPayPeriod}
+        isCreateModalOpen={isCreatePotModalOpen}
+        onCreateModalOpenChange={setIsCreatePotModalOpen}
+      />
+    ),
+    savingsInvestments: (
+      <SavingsInvestmentsPage
+        snapshot={snapshot}
+        actions={actions}
+        selectedPayPeriod={selectedPayPeriod}
+      />
+    ),
     spending: <SpendingPage snapshot={snapshot} actions={actions} selectedPayPeriod={selectedPayPeriod} />,
     allocatingPayments: (
       <AllocatingPaymentsPage snapshot={snapshot} actions={actions} selectedPayPeriod={selectedPayPeriod} />
     ),
     debts: <DebtsPage snapshot={snapshot} actions={actions} selectedPayPeriod={selectedPayPeriod} />,
-    recurring: <RecurringPage snapshot={snapshot} actions={actions} selectedPayPeriod={selectedPayPeriod} />,
+    recurring: (
+      <RecurringPage
+        snapshot={snapshot}
+        actions={actions}
+        selectedPayPeriod={selectedPayPeriod}
+        isCreateOpen={isCreateRecurringOpen}
+        onCreateOpenChange={setIsCreateRecurringOpen}
+      />
+    ),
     calendar: <CalendarPage snapshot={snapshot} selectedPayPeriod={selectedPayPeriod} />,
     history: <HistoryPage snapshot={snapshot} actions={actions} />,
-    settings: <SettingsPage snapshot={snapshot} actions={actions} auth={auth} sync={sync} />,
+    settings: <SettingsPage snapshot={snapshot} actions={actions} auth={auth} cloudSync={cloudSync} />,
   }
 
   return (
     <>
-      <AppShell activeView={activeView} onViewChange={setActiveView} selectedPayPeriod={selectedPayPeriod}>
+      <AppShell
+        activeView={activeView}
+        onViewChange={(view) => {
+          setActiveView(view)
+          if (view !== 'pots') {
+            setIsCreatePotModalOpen(false)
+          }
+          if (view !== 'recurring') {
+            setIsCreateRecurringOpen(false)
+          }
+        }}
+        selectedPayPeriod={selectedPayPeriod}
+        headerAction={
+          activeView === 'pots' ? (
+            <Button onClick={() => setIsCreatePotModalOpen(true)}>
+              <Plus size={18} />
+              Create pot
+            </Button>
+          ) : activeView === 'recurring' ? (
+            <Button onClick={() => setIsCreateRecurringOpen(true)}>
+              <Plus size={18} />
+              New payment
+            </Button>
+          ) : undefined
+        }
+      >
         {pages[activeView]}
       </AppShell>
       <AppAssistant
         snapshot={snapshot}
         activeView={activeView}
         selectedPayPeriod={selectedPayPeriod}
+        actions={actions}
         user={auth.user}
       />
     </>

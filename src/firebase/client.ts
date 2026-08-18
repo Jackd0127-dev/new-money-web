@@ -4,7 +4,7 @@ import { getFirestore, type Firestore } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  authDomain: getFirebaseAuthDomain(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN),
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
@@ -29,3 +29,24 @@ googleAuthProvider.setCustomParameters({
 export const appleAuthProvider = new OAuthProvider('apple.com')
 appleAuthProvider.addScope('email')
 appleAuthProvider.addScope('name')
+
+interface AuthLocation {
+  hostname: string
+  host: string
+}
+
+export function getFirebaseAuthDomain(configuredAuthDomain: string | undefined, location: AuthLocation | null = getRuntimeLocation()) {
+  if (location?.hostname === 'money.scriptai.space') {
+    return location.host
+  }
+
+  return configuredAuthDomain
+}
+
+function getRuntimeLocation(): AuthLocation | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  return window.location
+}

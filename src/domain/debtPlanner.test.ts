@@ -167,6 +167,8 @@ function createSettings(): Settings {
     defaultPayPeriodDays: 14,
     hourlyRatePence: 1000,
     defaultHoursWorked: 80,
+    appDateMode: 'automatic',
+    manualTodayIso: null,
     aiInstructions: '',
     aiProvider: 'gemini',
     createdAt: timestamp,

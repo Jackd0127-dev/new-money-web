@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   addCreditCard,
+  addCreditCardPot,
   addCreditCardRepayment,
   addCustomPayment,
   addDailyBrief,
@@ -12,14 +13,17 @@ import {
   addRecurringPayment,
   addTransaction,
   archiveCreditCard,
+  applyCreditCardPot,
   applyDebtReserve,
   cancelDebtReserve,
   createPaycheckPlan,
   deleteCustomPayment,
+  deleteCreditCardPot,
   deleteDebt,
   deleteDebtPayment,
   deleteCreditCardRepayment,
   deletePayPeriod,
+  deletePaycheckPotAllocation,
   deletePot,
   deleteRecurringPayment,
   deleteTransaction,
@@ -27,16 +31,22 @@ import {
   resetPlannerData,
   skipDebtReserve,
   toggleRecurringPayment,
+  updatePlannerDataToLatest,
   updateCreditCard,
+  updateCreditCardPot,
   updateCreditCardRepayment,
   updateDebt,
   updateDebtReserve,
   updateCustomPayment,
+  upsertPaycheckPotAllocation,
   updatePot,
   updateRecurringPayment,
   updateSettings,
   updateTransaction,
   type CreditCardInput,
+  type CreditCardPotApplyInput,
+  type CreditCardPotInput,
+  type CreditCardPotUpdateInput,
   type CreditCardRepaymentUpdateInput,
   type CreditCardUpdateInput,
   type CreditCardRepaymentInput,
@@ -51,6 +61,7 @@ import {
   type DebtReserveUpdateInput,
   type DebtUpdateInput,
   type PaycheckPlanInput,
+  type PaycheckPotAllocationInput,
   type PlannerSnapshot,
   type PotInput,
   type PotUpdateInput,
@@ -70,6 +81,10 @@ export interface PlannerActions {
   addCreditCard: typeof addCreditCard
   updateCreditCard: typeof updateCreditCard
   archiveCreditCard: typeof archiveCreditCard
+  addCreditCardPot: typeof addCreditCardPot
+  updateCreditCardPot: typeof updateCreditCardPot
+  deleteCreditCardPot: typeof deleteCreditCardPot
+  applyCreditCardPot: typeof applyCreditCardPot
   addCustomPayment: typeof addCustomPayment
   updateCustomPayment: typeof updateCustomPayment
   deleteCustomPayment: typeof deleteCustomPayment
@@ -95,8 +110,11 @@ export interface PlannerActions {
   skipDebtReserve: typeof skipDebtReserve
   applyDebtReserve: typeof applyDebtReserve
   createPaycheckPlan: typeof createPaycheckPlan
+  upsertPaycheckPotAllocation: typeof upsertPaycheckPotAllocation
+  deletePaycheckPotAllocation: typeof deletePaycheckPotAllocation
   deletePayPeriod: typeof deletePayPeriod
   resetPlannerData: typeof resetPlannerData
+  updatePlannerDataToLatest: typeof updatePlannerDataToLatest
 }
 
 export function usePlannerData() {
@@ -132,6 +150,10 @@ export function usePlannerData() {
       addCreditCard: withRefresh(addCreditCard, refresh),
       updateCreditCard: withRefresh(updateCreditCard, refresh),
       archiveCreditCard: withRefresh(archiveCreditCard, refresh),
+      addCreditCardPot: withRefresh(addCreditCardPot, refresh),
+      updateCreditCardPot: withRefresh(updateCreditCardPot, refresh),
+      deleteCreditCardPot: withRefresh(deleteCreditCardPot, refresh),
+      applyCreditCardPot: withRefresh(applyCreditCardPot, refresh),
       addCustomPayment: withRefresh(addCustomPayment, refresh),
       updateCustomPayment: withRefresh(updateCustomPayment, refresh),
       deleteCustomPayment: withRefresh(deleteCustomPayment, refresh),
@@ -157,8 +179,11 @@ export function usePlannerData() {
       skipDebtReserve: withRefresh(skipDebtReserve, refresh),
       applyDebtReserve: withRefresh(applyDebtReserve, refresh),
       createPaycheckPlan: withRefresh(createPaycheckPlan, refresh),
+      upsertPaycheckPotAllocation: withRefresh(upsertPaycheckPotAllocation, refresh),
+      deletePaycheckPotAllocation: withRefresh(deletePaycheckPotAllocation, refresh),
       deletePayPeriod: withRefresh(deletePayPeriod, refresh),
       resetPlannerData: withRefresh(resetPlannerData, refresh),
+      updatePlannerDataToLatest: withRefresh(updatePlannerDataToLatest, refresh),
     }),
     [refresh],
   )
@@ -183,6 +208,9 @@ function withRefresh<Args extends unknown[]>(
 
 export type {
   CreditCardInput,
+  CreditCardPotApplyInput,
+  CreditCardPotInput,
+  CreditCardPotUpdateInput,
   CreditCardRepaymentInput,
   CreditCardRepaymentUpdateInput,
   CreditCardUpdateInput,
@@ -197,6 +225,7 @@ export type {
   DebtReserveUpdateInput,
   DebtUpdateInput,
   PaycheckPlanInput,
+  PaycheckPotAllocationInput,
   PlannerSnapshot,
   PotInput,
   PotUpdateInput,

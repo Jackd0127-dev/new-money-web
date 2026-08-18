@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { toIsoDate } from '../domain/money'
+import { getAppTodayIso } from '../domain/money'
 import type { DailyBrief } from '../types/models'
 import type { DailyBriefInput, PlannerSnapshot } from '../storage/repository'
 
@@ -28,7 +28,7 @@ export function useDailyBrief({
   addDailyBrief: (input: DailyBriefInput) => Promise<void>
   apiPath?: string
 }): DailyBriefController {
-  const today = toIsoDate(new Date())
+  const today = snapshot ? getAppTodayIso(snapshot.settings) : getAppTodayIso()
   const [generatedBrief, setGeneratedBrief] = useState<DailyBrief | null>(null)
   const [status, setStatus] = useState<DailyBriefStatus>(user ? 'idle' : 'signed-out')
   const [error, setError] = useState<string | null>(null)

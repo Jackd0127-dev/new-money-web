@@ -1,0 +1,10 @@
+{
+  "id": "cart-geometric-4-violet",
+  "label": "Geometric 4 Violet",
+  "sourceDesignId": "cart-geometric-4",
+  "sourceNodeId": "1730:4631",
+  "bodyColor": "#6d28d9",
+  "topTextColor": "#faf5ff",
+  "topMutedColor": "rgba(250, 245, 255, 0.76)",
+  "bottomTextColor": "#ffffff"
+}
